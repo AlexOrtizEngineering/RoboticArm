@@ -120,9 +120,10 @@ class MainScreen(Screen):
     #     self.lastClick = currentTime
     #     return processInput
 
-    def toggleArm(self): #TODO fill out
-        print("Process arm movement here")
-
+    """
+        Precondition: MAGNET_STATUS is correctly declared
+        Switches the magnet between on and off, runs when a button is pressed
+    """
     def toggleMagnet(self):
         global MAGNET_STATUS
         if MAGNET_STATUS == OFF:
@@ -132,20 +133,44 @@ class MainScreen(Screen):
         else:
             print("Error toggling magnet")
 
+    """
+        Turns the magnet off, dropping the ball
+    """
     def dropBall(self):
-        print("Magnet turned off")
         global MAGNET_STATUS
         dpiComputer.writeServo(MAGNET_NUM, 90)
         MAGNET_STATUS = OFF
+        print("Magnet turned off")
 
-    def pickUpBall(self):
+    """
+        Turns the magnet on, picking up the ball
+    """
+    def pickUpBall(self, drop = False):
         print("Magnet turned on")
         global MAGNET_STATUS
         dpiComputer.writeServo(MAGNET_NUM, 180)
         MAGNET_STATUS = ON
-        
+        if drop:
+            sleep(5)
+            self.dropBall()
+        print("Magnet turned on")
+
+    """
+        Precondition: No components are moving, and their statuses are correctly accounted for
+        Runs when the "Start" button is pressed
+    """
     def auto(self): #TODO fill out
         print("Run the arm automatically here")
+        #if ball is on top tower, grab it, move it to bottom, maneuver over top tower, and go back to home
+        #if ball is on bottom tower, maneuver over top tower, grab it, move it to top and go back to home
+
+    def toggleArm(self): #TODO fill out with actual function
+        print("Process arm movement here")
+
+        dpiStepper.moveToRelativePositionInSteps(STEPPER_NUM, -10, True) #remove later
+        val, position = dpiStepper.getCurrentPositionInSteps(STEPPER_NUM)
+        print("Position: " + str(position))
+        self.homeArm(-1) #remove later?
 
     def setArmPosition(self, position): #TODO fill out
         print("Move arm here")
@@ -153,9 +178,23 @@ class MainScreen(Screen):
     """
         directionTowardHome: -1 is clockwise, 1 is counterclockwise
     """
-    def homeArm(self, directionTowardHome): #TODO FIX THIS!!!!!!!!
+    def homeArm(self, directionTowardHome): # TODO get this to work clockwise and counterclockwise and make movement fluid
         # arm.home(self.homeDirection)
-        dpiStepper.moveToHomeInRevolutions(STEPPER_NUM, directionTowardHome, 7, 1000)
+        if directionTowardHome not in [-1, 1]:
+            print("Error homing arm")
+            return
+
+        val, position = dpiStepper.getCurrentPositionInSteps(STEPPER_NUM)
+        print("Position: " + str(position))
+        # if position < 0:
+        #     dpiStepper.moveToHomeInSteps(STEPPER_NUM, -1, 100, 1000)
+        # elif position > 0:
+        #     dpiStepper.moveToHomeInSteps(STEPPER_NUM, 1, 100, 1000)
+        # else:
+        #     print("Arm already home")
+
+        dpiStepper.moveToHomeInSteps(STEPPER_NUM, directionTowardHome, 100, 1000)
+        print("Arm moved to home")
         
     def isBallOnTallTower(self): #TODO check that this works
         sensor_val = dpiComputer.readDigitalIn(dpiComputer.IN_CONNECTOR__IN_2)
@@ -174,7 +213,9 @@ class MainScreen(Screen):
         return False
 
     def initialize(self):
-        #self.homeArm(-1)
+        self.homeArm(-1)
+        #sleep(2)
+        #self.moveToRelativePositionInSteps(10)
         self.dropBall()
 
     def resetColors(self):
