@@ -64,6 +64,11 @@ DEBOUNCE = 0.10
 lowerTowerPosition = 60
 upperTowerPosition = 76
 
+STEPPER_NUM = 0
+MAGNET_NUM = 1
+MAGNET_STATUS = OFF
+AIR_NUM = 0
+AIR_STATUS = OFF
 
 # ////////////////////////////////////////////////////////////////
 # //            DECLARE APP CLASS AND SCREENMANAGER             //
@@ -84,8 +89,16 @@ Window.clearcolor = (.1, .1,.1, 1) # (WHITE)
 # ////////////////////////////////////////////////////////////////
 sm = ScreenManager()
 
+dpiStepper = DPiStepper()
+dpiStepper.setBoardNumber(STEPPER_NUM)
+if not dpiStepper.initialize():
+    print("Communication with the DPiStepper board failed.")
+dpiStepper.enableMotors(False)
 
+dpiComputer = DPiComputer()
+dpiComputer.initialize()
 
+print()
 # ////////////////////////////////////////////////////////////////
 # //                       MAIN FUNCTIONS                       //
 # //             SHOULD INTERACT DIRECTLY WITH HARDWARE         //
@@ -93,43 +106,76 @@ sm = ScreenManager()
 	
 class MainScreen(Screen):
     armPosition = 0
-    lastClick = time.clock()
+    # lastClick = time.clock()
 
     def __init__(self, **kwargs):
         super(MainScreen, self).__init__(**kwargs)
         self.initialize()
 
-    def debounce(self):
-        processInput = False
-        currentTime = time.clock()
-        if ((currentTime - self.lastClick) > DEBOUNCE):
-            processInput = True
-        self.lastClick = currentTime
-        return processInput
+    # def debounce(self):
+    #     processInput = False
+    #     currentTime = time.clock()
+    #     if (currentTime - self.lastClick) > DEBOUNCE:
+    #         processInput = True
+    #     self.lastClick = currentTime
+    #     return processInput
 
-    def toggleArm(self):
+    def toggleArm(self): #TODO fill out
         print("Process arm movement here")
 
     def toggleMagnet(self):
-        print("Process magnet here")
+        global MAGNET_STATUS
+        if MAGNET_STATUS == OFF:
+            self.pickUpBall()
+        elif MAGNET_STATUS == ON:
+            self.dropBall()
+        else:
+            print("Error toggling magnet")
+
+    def dropBall(self):
+        print("Magnet turned off")
+        global MAGNET_STATUS
+        dpiComputer.writeServo(MAGNET_NUM, 90)
+        MAGNET_STATUS = OFF
+
+    def pickUpBall(self):
+        print("Magnet turned on")
+        global MAGNET_STATUS
+        dpiComputer.writeServo(MAGNET_NUM, 180)
+        MAGNET_STATUS = ON
         
-    def auto(self):
+    def auto(self): #TODO fill out
         print("Run the arm automatically here")
 
-    def setArmPosition(self, position):
+    def setArmPosition(self, position): #TODO fill out
         print("Move arm here")
 
-    def homeArm(self):
-        arm.home(self.homeDirection)
+    """
+        directionTowardHome: -1 is clockwise, 1 is counterclockwise
+    """
+    def homeArm(self, directionTowardHome): #TODO FIX THIS!!!!!!!!
+        # arm.home(self.homeDirection)
+        dpiStepper.moveToHomeInRevolutions(STEPPER_NUM, directionTowardHome, 7, 1000)
         
-    def isBallOnTallTower(self):
-        print("Determine if ball is on the top tower")
+    def isBallOnTallTower(self): #TODO check that this works
+        sensor_val = dpiComputer.readDigitalIn(dpiComputer.IN_CONNECTOR__IN_2)
+        if sensor_val == 0:
+            sleep(DEBOUNCE)
+            if sensor_val == 0:
+                return True
+        return False
 
-    def isBallOnShortTower(self):
-        print("Determine if ball is on the bottom tower")
-        
+    def isBallOnShortTower(self): #TODO check that this works
+        sensor_val = dpiComputer.readDigitalIn(dpiComputer.IN_CONNECTOR__IN_1)
+        if sensor_val == 0:
+            sleep(DEBOUNCE)
+            if sensor_val == 0:
+                return True
+        return False
+
     def initialize(self):
-        print("Home arm and turn off magnet")
+        #self.homeArm(-1)
+        self.dropBall()
 
     def resetColors(self):
         self.ids.armControl.color = YELLOW
@@ -149,3 +195,11 @@ if __name__ == "__main__":
     # Window.fullscreen = True
     # Window.maximize()
     MyApp().run()
+
+# Stepper disabled
+dpiStepper.enableMotors(OFF)
+print("Stepper motor disabled")
+
+#Magnet off
+dpiComputer.writeServo(MAGNET_NUM, 90)
+print("Magnet turned off")
