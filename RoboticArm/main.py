@@ -65,6 +65,8 @@ lowerTowerPosition = 60
 upperTowerPosition = 76
 
 STEPPER_NUM = 0
+MICROSTEPPING = 8
+STEPPER_SPEED = 100
 MAGNET_NUM = 1
 MAGNET_STATUS = OFF
 AIR_NUM = 0
@@ -106,6 +108,7 @@ print()
 	
 class MainScreen(Screen):
     armPosition = 0
+    grabbingBall = False
     # lastClick = time.clock()
 
     def __init__(self, **kwargs):
@@ -145,14 +148,10 @@ class MainScreen(Screen):
     """
         Turns the magnet on, picking up the ball
     """
-    def pickUpBall(self, drop = False):
-        print("Magnet turned on")
+    def pickUpBall(self):
         global MAGNET_STATUS
         dpiComputer.writeServo(MAGNET_NUM, 180)
         MAGNET_STATUS = ON
-        if drop:
-            sleep(5)
-            self.dropBall()
         print("Magnet turned on")
 
     """
@@ -161,42 +160,124 @@ class MainScreen(Screen):
     """
     def auto(self): #TODO fill out
         print("Run the arm automatically here")
-        #if ball is on top tower, grab it, move it to bottom, maneuver over top tower, and go back to home
-        #if ball is on bottom tower, maneuver over top tower, grab it, move it to top and go back to home
-
-    def toggleArm(self): #TODO fill out with actual function
-        print("Process arm movement here")
-
-        dpiStepper.moveToRelativePositionInSteps(STEPPER_NUM, -10, True) #remove later
-        val, position = dpiStepper.getCurrentPositionInSteps(STEPPER_NUM)
-        print("Position: " + str(position))
-        self.homeArm(-1) #remove later?
-
-    def setArmPosition(self, position): #TODO fill out
-        print("Move arm here")
+        #if ball is on top tower, grab it, move it to bottom, maneuver over top tower
+        #if ball is on bottom tower, maneuver over top tower, grab it, move it to top
+        self.homeArm()
 
     """
+        Precondition: AIR_STATUS is properly declared
+        Switches between lowering and raising Robotic Arm
+    """
+    def toggleArm(self):
+        global AIR_STATUS
+        if AIR_STATUS == OFF:
+            self.raiseArm()
+        elif AIR_STATUS == ON:
+            self.lowerArm()
+        else:
+            print("Error toggling arm")
+
+    """
+        Turns on air, raising arm
+    """
+    def raiseArm(self):
+        global AIR_STATUS
+        dpiComputer.writeServo(AIR_NUM, 180)
+        AIR_STATUS = ON
+        print("Arm raised")
+
+    """
+        Turns off air, lowering arm
+    """
+    def lowerArm(self):
+        global AIR_STATUS
+        dpiComputer.writeServo(AIR_NUM, 90)
+        AIR_STATUS = OFF
+        print("Arm lowered")
+
+    """
+        Sets arm position based on its last location to avoid collisions with the towers
+    """
+    def setArmPosition(self, position): #TODO finish filling out arm movement and make sure this works for two towers
+        if position == 0:
+            self.homeArm(-1)
+            self.lowerArm()
+            self.armPosition = 0
+        elif position == 1:
+            self.raiseArm()
+            self.moveArm(40) # move to top tower
+            # self.check_for_ball("tall")
+            self.armPosition = 1
+        elif position == 2:
+            # move to bottom tower
+            # lower arm
+            # self.check_for_ball("short")
+            self.armPosition = 2
+        else:
+            print("Error setting arm position")
+
+    """
+        Grabs or drops ball based on location, or don't do anything if ball isn't there
+    """
+    def check_for_ball(self, tower):
+        boolean = ''
+        if tower == "tall":
+            boolean = self.isBallOnTallTower()
+        elif tower == "short":
+            boolean = self.isBallOnShortTower()
+        else:
+            print("tower variable incorrectly defined")
+
+        if self.grabbingBall:
+            self.dropBall()
+            self.grabbingBall = False
+        elif not self.grabbingBall and boolean:
+            self.pickUpBall()
+            self.grabbingBall = True
+
+    """
+        Moves arm in steps and gets the position
+    """
+    def moveArm(self, distanceToMoveInSteps):
+        dpiStepper.moveToRelativePositionInSteps(STEPPER_NUM, distanceToMoveInSteps, True)
+        print(self.getArmPosition())
+
+    """
+        Returns position of arm
+        Postcondition: Positive or negative int
+    """
+    def getArmPosition(self):
+        val, position = dpiStepper.getCurrentPositionInSteps(STEPPER_NUM)
+        return position
+
+    """
+        Precondition: If initial = True, the metal screw on the Robotic Arm servo is to the right of the Limit Sensor connected to Home
         directionTowardHome: -1 is clockwise, 1 is counterclockwise
+        Moves arm to home either clockwise or counterclockwise; on first call, checks that directionTowardHome is the correct value
     """
-    def homeArm(self, directionTowardHome): # TODO get this to work clockwise and counterclockwise and make movement fluid
+    def homeArm(self, directionTowardHome = -1, initial = False):
         # arm.home(self.homeDirection)
-        if directionTowardHome not in [-1, 1]:
-            print("Error homing arm")
-            return
+        if initial:
+            if directionTowardHome not in [-1, 1]:
+                print("Error homing arm")
+            else:
+                dpiStepper.moveToHomeInSteps(STEPPER_NUM, directionTowardHome, STEPPER_SPEED * MICROSTEPPING, 1600)
+        else:
+            position = self.getArmPosition()
+            if position < 0:
+                dpiStepper.moveToHomeInSteps(STEPPER_NUM, 1, STEPPER_SPEED * MICROSTEPPING, 1600)
+            elif position > 0:
+                dpiStepper.moveToHomeInSteps(STEPPER_NUM, -1, STEPPER_SPEED * MICROSTEPPING, 1600)
+            else:
+                print("Arm already home")
 
-        val, position = dpiStepper.getCurrentPositionInSteps(STEPPER_NUM)
-        print("Position: " + str(position))
-        # if position < 0:
-        #     dpiStepper.moveToHomeInSteps(STEPPER_NUM, -1, 100, 1000)
-        # elif position > 0:
-        #     dpiStepper.moveToHomeInSteps(STEPPER_NUM, 1, 100, 1000)
-        # else:
-        #     print("Arm already home")
-
-        dpiStepper.moveToHomeInSteps(STEPPER_NUM, directionTowardHome, 100, 1000)
         print("Arm moved to home")
-        
-    def isBallOnTallTower(self): #TODO check that this works
+
+    """
+        Precondition: Tall tower sensor is connected to IN 2 on dpiComputer
+        Postcondition: Returns True or False
+    """
+    def isBallOnTallTower(self):
         sensor_val = dpiComputer.readDigitalIn(dpiComputer.IN_CONNECTOR__IN_2)
         if sensor_val == 0:
             sleep(DEBOUNCE)
@@ -204,7 +285,11 @@ class MainScreen(Screen):
                 return True
         return False
 
-    def isBallOnShortTower(self): #TODO check that this works
+    """
+        Precondition: Short tower sensor is connected to IN 1 on dpiComputer
+        Postcondition: Returns True or False
+    """
+    def isBallOnShortTower(self):
         sensor_val = dpiComputer.readDigitalIn(dpiComputer.IN_CONNECTOR__IN_1)
         if sensor_val == 0:
             sleep(DEBOUNCE)
@@ -212,11 +297,26 @@ class MainScreen(Screen):
                 return True
         return False
 
+    """
+        Initializes stepper motor settings, homes arm, turns off magnet
+    """
     def initialize(self):
-        self.homeArm(-1)
-        #sleep(2)
-        #self.moveToRelativePositionInSteps(10)
+        self.initialize_motor_settings()
+        self.homeArm(-1, True)
         self.dropBall()
+
+    """
+        Precondition: Stepper motor is connected to dpiStepper board
+        Sets microstepping, speed, and acceleration of Stepper motor
+    """
+    def initialize_motor_settings(self):
+        global MICROSTEPPING
+        dpiStepper.setMicrostepping(MICROSTEPPING)
+
+        speed_steps_per_second = STEPPER_SPEED * MICROSTEPPING
+        dpiStepper.setSpeedInStepsPerSecond(STEPPER_NUM, speed_steps_per_second)
+        dpiStepper.setAccelerationInStepsPerSecondPerSecond(STEPPER_NUM, speed_steps_per_second)
+        print("Motor settings initialized")
 
     def resetColors(self):
         self.ids.armControl.color = YELLOW
@@ -244,3 +344,9 @@ print("Stepper motor disabled")
 #Magnet off
 dpiComputer.writeServo(MAGNET_NUM, 90)
 print("Magnet turned off")
+
+#Arm lowered
+dpiComputer.writeServo(AIR_NUM, 90)
+print("Arm lowered")
+
+#TODO is anything else needed to ensure no collisions occur?
