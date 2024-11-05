@@ -61,8 +61,8 @@ COUNTERCLOCKWISE = 1
 ARM_SLEEP = 2.5
 DEBOUNCE = 0.10
 
-lowerTowerPosition = 60
-upperTowerPosition = 76
+lowerTowerPositionFromUpper = 545
+upperTowerPosition = 780
 
 STEPPER_NUM = 0
 MICROSTEPPING = 8
@@ -71,6 +71,7 @@ MAGNET_NUM = 1
 MAGNET_STATUS = OFF
 AIR_NUM = 0
 AIR_STATUS = OFF
+globalArmPosition = 0
 
 # ////////////////////////////////////////////////////////////////
 # //            DECLARE APP CLASS AND SCREENMANAGER             //
@@ -155,13 +156,18 @@ class MainScreen(Screen):
         print("Magnet turned on")
 
     """
-        Precondition: No components are moving, and their statuses are correctly accounted for
-        Runs when the "Start" button is pressed
+        Precondition: No components are moving, and their statuses are correctly accounted for. Robotic Arm is at home (position 0)
+        Runs when the "Start" button is pressed; will either move ball to the other tower or will deposit ball in tall tower if ball is already being held
     """
-    def auto(self): #TODO fill out
+    def auto(self):
         print("Run the arm automatically here")
-        #if ball is on top tower, grab it, move it to bottom, maneuver over top tower
-        #if ball is on bottom tower, maneuver over top tower, grab it, move it to top
+        self.setArmPosition(1)
+        if self.isBallOnTallTower() or self.isBallOnShortTower():
+            sleep(2)
+            self.setArmPosition(2)
+            sleep(2)
+            self.setArmPosition(1)
+        sleep(2)
         self.homeArm()
 
     """
@@ -198,23 +204,40 @@ class MainScreen(Screen):
     """
         Sets arm position based on its last location to avoid collisions with the towers
     """
-    def setArmPosition(self, position): #TODO finish filling out arm movement and make sure this works for two towers
+    def setArmPosition(self, position):
+        global globalArmPosition
         if position == 0:
             self.homeArm(-1)
             self.lowerArm()
-            self.armPosition = 0
+            self.set_arm_position(0)
         elif position == 1:
-            self.raiseArm()
-            self.moveArm(40) # move to top tower
-            # self.check_for_ball("tall")
-            self.armPosition = 1
+            if self.armPosition == 0:
+                self.raiseArm()
+                self.moveArm(upperTowerPosition)
+            elif self.armPosition == 2:
+                self.moveArm(-1 * lowerTowerPositionFromUpper)
+            else:
+                print("Error setting position")
+            sleep(DEBOUNCE)
+            self.check_for_ball("tall")
+            self.set_arm_position(1)
         elif position == 2:
-            # move to bottom tower
-            # lower arm
-            # self.check_for_ball("short")
-            self.armPosition = 2
+            self.moveArm(lowerTowerPositionFromUpper)
+            sleep(DEBOUNCE)
+            self.check_for_ball("short")
+            self.set_arm_position(2)
         else:
             print("Error setting arm position")
+
+    """
+        Updates variables based on new position
+    """
+    def set_arm_position(self, position_value):
+        global globalArmPosition
+        globalArmPosition = position_value
+        self.armPosition = position_value
+        self.ids.armControlLabel.text = "Arm Position: " + str(position_value)
+        print("Arm position is " + str(position_value))
 
     """
         Grabs or drops ball based on location, or don't do anything if ball isn't there
@@ -228,19 +251,31 @@ class MainScreen(Screen):
         else:
             print("tower variable incorrectly defined")
 
+        self.interact_with_tower(boolean)
+        sleep(0.5)
+        Clock.schedule_once(lambda dt: self.raiseArm(), DEBOUNCE)
+
+    """
+        Either picks up the ball, drops the ball, or ignores the ball if it isn't there
+    """
+    def interact_with_tower(self, boolean):
         if self.grabbingBall:
-            self.dropBall()
+            self.lowerArm()
             self.grabbingBall = False
+            sleep(0.5)
+            Clock.schedule_once(lambda dt: self.dropBall(), DEBOUNCE)
         elif not self.grabbingBall and boolean:
-            self.pickUpBall()
+            self.lowerArm()
             self.grabbingBall = True
+            sleep(0.5)
+            Clock.schedule_once(lambda dt: self.pickUpBall(), DEBOUNCE)
 
     """
         Moves arm in steps and gets the position
     """
     def moveArm(self, distanceToMoveInSteps):
         dpiStepper.moveToRelativePositionInSteps(STEPPER_NUM, distanceToMoveInSteps, True)
-        print(self.getArmPosition())
+        print("Arm moved")
 
     """
         Returns position of arm
@@ -270,7 +305,7 @@ class MainScreen(Screen):
                 dpiStepper.moveToHomeInSteps(STEPPER_NUM, -1, STEPPER_SPEED * MICROSTEPPING, 1600)
             else:
                 print("Arm already home")
-
+        self.initialize_motor_settings()
         print("Arm moved to home")
 
     """
@@ -337,16 +372,20 @@ if __name__ == "__main__":
     # Window.maximize()
     MyApp().run()
 
-# Stepper disabled
-dpiStepper.enableMotors(OFF)
-print("Stepper motor disabled")
-
-#Magnet off
-dpiComputer.writeServo(MAGNET_NUM, 90)
-print("Magnet turned off")
-
-#Arm lowered
+# Arm lowered
 dpiComputer.writeServo(AIR_NUM, 90)
 print("Arm lowered")
 
-#TODO is anything else needed to ensure no collisions occur?
+# Magnet off
+dpiComputer.writeServo(MAGNET_NUM, 90)
+print("Magnet turned off")
+
+# Arm homed
+if globalArmPosition == 2:
+    dpiStepper.moveToHomeInSteps(STEPPER_NUM, 1, STEPPER_SPEED * MICROSTEPPING, 2000)
+else:
+    dpiStepper.moveToHomeInSteps(STEPPER_NUM, -1, STEPPER_SPEED * MICROSTEPPING, 2000)
+
+# Stepper disabled
+dpiStepper.enableMotors(OFF)
+print("Stepper motor disabled")
