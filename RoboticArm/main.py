@@ -61,7 +61,7 @@ COUNTERCLOCKWISE = 1
 ARM_SLEEP = 2.5
 DEBOUNCE = 0.10
 
-lowerTowerPositionFromUpper = 545
+lowerTowerPositionFromUpper = 535
 upperTowerPosition = 780
 
 STEPPER_NUM = 0
@@ -101,7 +101,6 @@ dpiStepper.enableMotors(False)
 dpiComputer = DPiComputer()
 dpiComputer.initialize()
 
-print()
 # ////////////////////////////////////////////////////////////////
 # //                       MAIN FUNCTIONS                       //
 # //             SHOULD INTERACT DIRECTLY WITH HARDWARE         //
@@ -160,15 +159,31 @@ class MainScreen(Screen):
         Runs when the "Start" button is pressed; will either move ball to the other tower or will deposit ball in tall tower if ball is already being held
     """
     def auto(self):
-        print("Run the arm automatically here")
         self.setArmPosition(1)
+        Clock.schedule_once(lambda dt: self.auto_interact(), DEBOUNCE)
+
+    """
+        Automatically interacts with ball based on location
+    """
+    def auto_interact(self):
         if self.isBallOnTallTower() or self.isBallOnShortTower():
-            sleep(2)
-            self.setArmPosition(2)
-            sleep(2)
-            self.setArmPosition(1)
-        sleep(2)
-        self.homeArm()
+            self.auto_move(2)
+            Clock.schedule_once(lambda dt: self.auto_move(1), DEBOUNCE)
+        else:
+            sleep(1)
+            Clock.schedule_once(lambda dt: self.homeArm(), DEBOUNCE)
+
+    """
+        Precondition: num is equal to 1 or 2
+        Automatically moves arm, called in auto_interact()
+    """
+    def auto_move(self, num):
+        sleep(1)
+        self.setArmPosition(num)
+        if num == 1:
+            sleep(1)
+            Clock.schedule_once(lambda dt: self.homeArm(), DEBOUNCE)
+            Clock.schedule_once(lambda dt: self.lowerArm(), DEBOUNCE)
 
     """
         Precondition: AIR_STATUS is properly declared
@@ -218,6 +233,7 @@ class MainScreen(Screen):
                 self.moveArm(-1 * lowerTowerPositionFromUpper)
             else:
                 print("Error setting position")
+                return
             sleep(DEBOUNCE)
             self.check_for_ball("tall")
             self.set_arm_position(1)
@@ -237,7 +253,6 @@ class MainScreen(Screen):
         globalArmPosition = position_value
         self.armPosition = position_value
         self.ids.armControlLabel.text = "Arm Position: " + str(position_value)
-        print("Arm position is " + str(position_value))
 
     """
         Grabs or drops ball based on location, or don't do anything if ball isn't there
@@ -250,7 +265,6 @@ class MainScreen(Screen):
             boolean = self.isBallOnShortTower()
         else:
             print("tower variable incorrectly defined")
-
         self.interact_with_tower(boolean)
         sleep(0.5)
         Clock.schedule_once(lambda dt: self.raiseArm(), DEBOUNCE)
@@ -267,7 +281,7 @@ class MainScreen(Screen):
         elif not self.grabbingBall and boolean:
             self.lowerArm()
             self.grabbingBall = True
-            sleep(0.5)
+            sleep(1)
             Clock.schedule_once(lambda dt: self.pickUpBall(), DEBOUNCE)
 
     """
@@ -306,6 +320,7 @@ class MainScreen(Screen):
             else:
                 print("Arm already home")
         self.initialize_motor_settings()
+        self.set_arm_position(0)
         print("Arm moved to home")
 
     """
